@@ -5,8 +5,6 @@
       <h1 class="my-6 text-center text-3xl font-extrabold text-gray-900">
         Details for Grant Round: <span :title="grantRound.address">{{ formatAddress(grantRound.address) }}</span>
       </h1>
-      <p>Name: {{ grantRoundMetadata?.name }}</p>
-      <p>Description: {{ grantRoundMetadata?.description }}</p>
       <p>Status: {{ grantRound.status }}</p>
       <p>
         Funds:
@@ -50,14 +48,11 @@
         Address:
         <a class="link" :href="`https://etherscan.io/address/${grantRound.address}`">{{ grantRound.address }}</a>
       </p>
+      <p>
+        Metadata URL: <a class="link" :href="grantRound.metaPtr" target="_blank">{{ grantRound.metaPtr }}</a>
+      </p>
 
-      <div class="flex justify-center">
-        <button @click="startContributing" class="btn btn-primary mt-6">Contribute to the matching fund</button>
-      </div>
-
-      <!-- Grants Belonging to GrantRound -->
-      <div class="my-4">Below are the Grants participating in this round</div>
-      <GrantList v-if="grants && grantMetadata" :grants="grants" :grantMetadata="grantMetadata" />
+      <button @click="startContributing" class="btn btn-primary mt-6">Contribute to the matching fund</button>
     </div>
     <div v-else-if="grantRound.error">
       <span>{{ grantRound.error }}</span>
@@ -124,11 +119,7 @@
 <script lang="ts">
 import { computed, defineComponent, ref } from 'vue';
 import { useRoute } from 'vue-router';
-
-// --- App Imports ---
 import BaseInput from 'src/components/BaseInput.vue';
-import GrantList from 'src/components/GrantList.vue';
-
 // --- Store ---
 import useDataStore from 'src/store/data';
 import useWalletStore from 'src/store/wallet';
@@ -153,18 +144,11 @@ import {
   hasStatus,
 } from 'src/utils/utils';
 // --- Types ---
-import { Grant, GrantRound } from '@dgrants/types';
+import { GrantRound } from '@dgrants/types';
 import { GrantRound as GrantRoundContract } from '@dgrants/contracts';
 
 function useGrantRoundDetail() {
-  const {
-    grantRounds,
-    grantRoundMetadata: _grantRoundMetadata,
-    grants: allGrants,
-    grantMetadata,
-    poll,
-  } = useDataStore();
-
+  const { grantRounds, poll } = useDataStore();
   const { signer, userAddress } = useWalletStore();
   const route = useRoute();
 
@@ -177,22 +161,6 @@ function useGrantRoundDetail() {
       return <GrantRound>(round.length ? round[0] : { error: `No GrantRound @ ${route.params.address}` });
     } else {
       return <GrantRound>{};
-    }
-  });
-
-  const grantRoundMetadata = computed(() =>
-    grantRound.value ? _grantRoundMetadata.value[grantRound.value.metaPtr] : null
-  );
-
-  /**
-   * @notice returns grants present in grantRound
-   */
-  const grants = computed(() => {
-    if (allGrants.value && grantRoundMetadata?.value?.grants) {
-      const grantIdsInRound = Object.keys(grantRoundMetadata?.value['grants']);
-      return allGrants.value.filter((grant) => grantIdsInRound.includes(grant.id.toString()));
-    } else {
-      return <Grant[]>[];
     }
   });
 
@@ -279,10 +247,7 @@ function useGrantRoundDetail() {
     isValidAddress,
     isValidUrl,
     isFormValid,
-    grants,
-    grantMetadata,
     grantRound,
-    grantRoundMetadata,
     form,
     startContributing,
     cancelContribution,
@@ -292,7 +257,7 @@ function useGrantRoundDetail() {
 
 export default defineComponent({
   name: 'GrantRoundDetails',
-  components: { BaseInput, GrantList },
+  components: { BaseInput },
   setup() {
     return { ...useGrantRoundDetail() };
   },

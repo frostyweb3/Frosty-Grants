@@ -32,30 +32,20 @@
             errorMsg="Please enter a valid address"
           />
 
-          <!-- Grant name -->
+          <!-- Metadata pointer -->
           <BaseInput
-            v-model="form.name"
-            description="Your grant's name"
-            id="grant-name"
-            label="Grant name"
-            :rules="isDefined"
-            errorMsg="Please enter a name"
-          />
-
-          <!-- Grant name -->
-          <BaseInput
-            v-model="form.description"
-            description="Your grant's description"
-            id="grant-description"
-            label="Grant description"
-            :rules="isDefined"
-            errorMsg="Please enter a description"
+            v-model="form.metaPtr"
+            description="URL containing additional details about this grant"
+            id="metadata-url"
+            label="Metadata URL"
+            :rules="isValidUrl"
+            errorMsg="Please enter a valid URL"
           />
 
           <!-- Submit button -->
           <button
             type="submit"
-            class="btn btn-primary w-full text-center"
+            class="btn btn-primary w-full"
             :class="{ 'btn-primary-disabled': !isFormValid }"
             :disabled="!isFormValid"
           >
@@ -76,8 +66,7 @@ import useWalletStore from 'src/store/wallet';
 // --- Methods and Data ---
 import { GRANT_REGISTRY_ADDRESS, GRANT_REGISTRY_ABI } from 'src/utils/constants';
 import { Contract } from 'src/utils/ethers';
-import { isValidAddress, isValidUrl, isDefined, pushRoute } from 'src/utils/utils';
-import * as ipfs from 'src/utils/ipfs';
+import { isValidAddress, isValidUrl, pushRoute } from 'src/utils/utils';
 // --- Types ---
 import { GrantRegistry } from '@dgrants/contracts';
 
@@ -86,18 +75,13 @@ function useNewGrant() {
   const { poll } = useDataStore();
 
   // Define form fields and parameters
-  const form = ref<{ owner: string; payee: string; name: string; description: string }>({
+  const form = ref<{ owner: string; payee: string; metaPtr: string }>({
     owner: '',
     payee: '',
-    name: '',
-    description: '',
+    metaPtr: '',
   });
   const isFormValid = computed(
-    () =>
-      isValidAddress(form.value.owner) &&
-      isValidAddress(form.value.payee) &&
-      isDefined(form.value.name) &&
-      isDefined(form.value.description)
+    () => isValidAddress(form.value.owner) && isValidAddress(form.value.payee) && isValidUrl(form.value.metaPtr)
   );
 
   /**
@@ -105,11 +89,8 @@ function useNewGrant() {
    */
   async function createGrant() {
     // Send transaction
-    const { owner, payee, name, description } = form.value;
+    const { owner, payee, metaPtr } = form.value;
     if (!signer.value) throw new Error('Please connect a wallet');
-    const metaPtr = await ipfs
-      .uploadGrantMetadata({ name, description })
-      .then((cid) => ipfs.getMetaPtr({ cid: cid.toString() }));
     const registry = <GrantRegistry>new Contract(GRANT_REGISTRY_ADDRESS, GRANT_REGISTRY_ABI, signer.value);
     const tx = await registry.createGrant(owner, payee, metaPtr);
     await tx.wait();
@@ -123,7 +104,7 @@ function useNewGrant() {
     await pushRoute({ name: 'dgrants-id', params: { id: log.args.id.toString() } });
   }
 
-  return { createGrant, isValidAddress, isValidUrl, isFormValid, isDefined, form };
+  return { createGrant, isValidAddress, isValidUrl, isFormValid, form };
 }
 
 export default defineComponent({

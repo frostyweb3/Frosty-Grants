@@ -1,5 +1,5 @@
 {
-  "packages": ["app", "contracts", "types", "dcurve", "utils"],
+  "packages": ["app", "contracts", "types"],
   "npmClient": "yarn",
   "version": "independent",
   "useWorkspaces": true,

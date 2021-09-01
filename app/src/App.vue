@@ -1,55 +1,50 @@
 <template>
+  <Loading :showLoading="showLoading" @toggle-loading="toggleLoading" />
+  <About :showAbout="showAbout" @toggle-about="toggleAbout" />
   <div class="flex flex-col min-h-screen">
-    <layout-header id="header" />
+    <layout-header id="header" @toggle-about="toggleAbout" @toggle-loading="toggleLoading" />
     <main id="app-main" class="flex-grow bg-white"><router-view /></main>
-    <layout-footer id="footer" />
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent, onMounted } from 'vue';
-import LayoutHeader from './components/LayoutHeader.vue';
-import LayoutFooter from './components/LayoutFooter.vue';
-import useCartStore from 'src/store/cart';
 import useSettingsStore from 'src/store/settings';
 import useWalletStore from 'src/store/wallet';
+import LayoutHeader from './components/LayoutHeader.vue';
+import About from './components/About.vue';
+import Loading from './components/Loading.vue';
 
 export default defineComponent({
   name: 'App',
-  components: { LayoutHeader, LayoutFooter },
+  components: { LayoutHeader, About, Loading },
+
+  data() {
+    return {
+      showAbout: false,
+      showLoading: false,
+    };
+  },
+
+  methods: {
+    toggleAbout() {
+      this.showAbout = !this.showAbout;
+      console.log(this.showAbout);
+    },
+    toggleLoading() {
+      this.showLoading = !this.showLoading;
+      console.log(this.showLoading);
+    },
+  },
+
   setup() {
-    // Load cart, load settings, and try connecting user's wallet on page load
-    const { initializeCart } = useCartStore();
+    // Load settings and try connecting user's wallet on page load
     const { connectWallet } = useWalletStore();
     const { lastWallet, initializeSettings } = useSettingsStore();
     onMounted(async () => {
-      initializeCart();
       await initializeSettings();
       if (lastWallet.value) await connectWallet(lastWallet.value);
     });
   },
 });
 </script>
-
-<style>
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-}
-
-#nav {
-  padding: 30px;
-}
-
-#nav a {
-  font-weight: bold;
-  color: #2c3e50;
-}
-
-#nav a.router-link-exact-active {
-  color: #42b983;
-}
-</style>

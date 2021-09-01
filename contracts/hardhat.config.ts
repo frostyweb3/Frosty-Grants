@@ -52,7 +52,7 @@ function createTestnetConfig(network: keyof typeof chainIds): NetworkUserConfig 
 }
 
 const config: HardhatUserConfig = {
-  defaultNetwork: 'hardhat',
+  defaultNetwork: 'fuji',
   gasReporter: {
     currency: 'USD',
     enabled: process.env.REPORT_GAS ? true : false,
@@ -68,10 +68,24 @@ const config: HardhatUserConfig = {
       },
       chainId: chainIds.hardhat,
     },
-    goerli: createTestnetConfig('goerli'),
-    kovan: createTestnetConfig('kovan'),
-    rinkeby: createTestnetConfig('rinkeby'),
-    ropsten: createTestnetConfig('ropsten'),
+    fuji: {
+      url: 'https://api.avax-test.network/ext/bc/C/rpc',
+      gasPrice: 225000000000,
+      gas: 50000,
+      chainId: 43113,
+      accounts: [
+        mnemonic,// mnemonic == private key for fuji account: 0x7a8ceF01b0475090319c4D76ca10Bb359750B0FF
+      ]
+    },
+    /*
+    mainnet: {
+      url: 'https://api.avax.network/ext/bc/C/rpc',
+      gasPrice: 225000000000,
+      chainId: 43114,
+      accounts: [
+      ]
+    }
+    */
   },
   paths: {
     artifacts: './artifacts',
@@ -80,7 +94,7 @@ const config: HardhatUserConfig = {
     tests: './test',
   },
   solidity: {
-    version: '0.7.6',
+    version: '0.8.6',
     settings: {
       metadata: {
         // Not including the metadata hash

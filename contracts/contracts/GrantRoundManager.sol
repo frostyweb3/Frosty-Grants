@@ -1,74 +1,65 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.7.6;
-pragma abicoder v2;
+pragma solidity ^0.8.5;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "./SwapRouter.sol";
+import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
+import "solidity-bytes-utils/contracts/BytesLib.sol";
 import "./GrantRegistry.sol";
 import "./GrantRound.sol";
 
-contract GrantRoundManager is SwapRouter {
-  // --- Libraries ---
+contract GrantRoundManager {
   using Address for address;
   using BytesLib for bytes;
   using SafeERC20 for IERC20;
 
-  // --- Data ---
+  /// @notice Donation inputs and Uniswap V3 swap inputs: https://docs.uniswap.org/protocol/guides/swaps/multihop-swaps
+  struct Donation {
+    uint96 grantId; // grant ID to which donation is being made
+    GrantRound[] rounds; // rounds against which the donation should be counted
+    bytes path; // swap path, or if user is providing donationToken, the address of the donationToken
+    uint256 deadline; // unix timestamp after which a swap will revert, i.e. swap must be executed before this
+    uint256 amountIn; // amount donated by the user
+    uint256 amountOutMinimum; // minimum amount to be returned after swap
+  }
+
   /// @notice Address of the GrantRegistry
   GrantRegistry public immutable registry;
+
+  /// @notice Address of the Uniswap V3 Router used for token swaps
+  ISwapRouter public immutable router;
 
   /// @notice Address of the ERC20 token in which donations are made
   IERC20 public immutable donationToken;
 
-  mapping(IERC20 => uint256) internal swapOutputs;
+  /// @notice WETH address
+  address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
-  mapping(IERC20 => uint256) internal donationRatios;
-
-  /// @dev Scale factor on percentages when constructing `Donation` objects. One WAD represents 100%
-  uint256 internal constant WAD = 1e18;
-
-  /// --- Types ---
-  /// @notice Defines the total `amount` of the specified `token` that needs to be swapped to `donationToken`. If
-  /// `path == donationToken`, no swap is required and we just transfer the tokens
-  struct SwapSummary {
-    uint256 amountIn;
-    uint256 amountOutMin; // minimum amount to be returned after swap
-    bytes path;
-  }
-
-  /// @notice Donation inputs and Uniswap V3 swap inputs: https://docs.uniswap.org/protocol/guides/swaps/multihop-swaps
-  struct Donation {
-    uint96 grantId; // grant ID to which donation is being made
-    IERC20 token; // address of the token to donate
-    uint256 ratio; // ratio of `token` to donate, specified as numerator where WAD = 1e18 = 100%
-    GrantRound[] rounds; // rounds against which the donation should be counted
-  }
-
-  // --- Events ---
   /// @notice Emitted when a new GrantRound contract is created
   event GrantRoundCreated(address grantRound);
 
   /// @notice Emitted when a donation has been made
-  event GrantDonation(uint96 indexed grantId, IERC20 indexed tokenIn, uint256 donationAmount, GrantRound[] rounds);
+  event GrantDonation(
+    uint96 indexed grantId,
+    IERC20 indexed tokenIn,
+    uint256 amountIn,
+    uint256 amountOut,
+    GrantRound[] rounds
+  );
 
-  // --- Constructor ---
   constructor(
     GrantRegistry _registry,
-    IERC20 _donationToken,
-    address _factory,
-    address _weth
-  ) SwapRouter(_factory, _weth) {
-    // Validation
+    ISwapRouter _router,
+    IERC20 _donationToken
+  ) {
     require(_registry.grantCount() >= 0, "GrantRoundManager: Invalid registry");
+    require(address(_router).isContract(), "GrantRoundManager: Invalid router"); // Router interface doesn't have a state variable to check
     require(_donationToken.totalSupply() > 0, "GrantRoundManager: Invalid token");
 
-    // Set state
     registry = _registry;
+    router = _router;
     donationToken = _donationToken;
   }
-
-  // --- Core methods ---
 
   /**
    * @notice Creates a new GrantRound
@@ -108,112 +99,66 @@ contract GrantRoundManager is SwapRouter {
   }
 
   /**
-   * @notice Performs swaps if necessary and donates funds as specified
-   * @param _swaps Array of SwapSummary objects describing the swaps required
-   * @param _deadline Unix timestamp after which a swap will revert, i.e. swap must be executed before this
-   * @param _donations Array of donations to execute
-   * @dev `_deadline` is not part of the `_swaps` array since all swaps can use the same `_deadline` to save some gas
-   * @dev Caller must ensure the input tokens to the _swaps array are unique
-   * @dev Does not verify
+   * @notice Swap and donate to a grant
+   * @param  _donation Donation being made to a grant
    */
-  function donate(
-    SwapSummary[] calldata _swaps,
-    uint256 _deadline,
-    Donation[] calldata _donations
-  ) external payable {
-    // Main logic
-    _validateDonations(_donations);
-    _executeDonationSwaps(_swaps, _deadline);
-    _transferDonations(_donations);
+  function swapAndDonate(Donation calldata _donation) external payable {
+    // --- Validation ---
+    // Rounds must be specified
+    GrantRound[] calldata _rounds = _donation.rounds;
+    require(_rounds.length > 0, "GrantRoundManager: Must specify at least one round");
 
-    // Clear storage for refunds (this is set in _executeDonationSwaps)
-    for (uint256 i = 0; i < _swaps.length; i++) {
-      IERC20 _tokenIn = IERC20(_swaps[i].path.toAddress(0));
-      swapOutputs[_tokenIn] = 0;
-      donationRatios[_tokenIn] = 0;
-    }
-  }
+    // Only allow value to be sent if the input token is WETH (this limitation should be fixed in #76, as this
+    // require statement prohibits donating WETH)
+    IERC20 _tokenIn = IERC20(_donation.path.toAddress(0));
+    require(
+      (msg.value == 0 && address(_tokenIn) != WETH) || (msg.value > 0 && address(_tokenIn) == WETH),
+      "GrantRoundManager: Invalid token-value pairing"
+    );
 
-  /**
-   * @dev Validates the the inputs to a donation call are valid, and reverts if any requirements are violated
-   * @param _donations Array of donations that will be executed
-   */
-  function _validateDonations(Donation[] calldata _donations) internal {
-    // TODO consider moving this to the section where we already loop through donations in case that saves a lot of
-    // gas. Leaving it here for now to improve readability
+    // Ensure grant recieving donation exists in registry
+    uint96 _grantId = _donation.grantId;
+    require(_grantId < registry.grantCount(), "GrantRoundManager: Grant does not exist in registry");
 
-    for (uint256 i = 0; i < _donations.length; i++) {
-      // Validate grant exists
-      require(_donations[i].grantId < registry.grantCount(), "GrantRoundManager: Grant does not exist in registry");
-
-      // Used later to validate ratios are correctly provided
-      donationRatios[_donations[i].token] += _donations[i].ratio;
-
-      // Validate round parameters
-      GrantRound[] calldata _rounds = _donations[i].rounds;
-      for (uint256 j = 0; j < _rounds.length; j++) {
-        require(_rounds[j].isActive(), "GrantRoundManager: GrantRound is not active");
-        require(
-          donationToken == _rounds[j].donationToken(),
-          "GrantRoundManager: GrantRound's donation token does not match GrantRoundManager's donation token"
-        );
-      }
-    }
-  }
-
-  /**
-   * @dev Performs swaps if necessary
-   * @param _swaps Array of SwapSummary objects describing the swaps required
-   * @param _deadline Unix timestamp after which a swap will revert, i.e. swap must be executed before this
-   */
-  function _executeDonationSwaps(SwapSummary[] calldata _swaps, uint256 _deadline) internal {
-    for (uint256 i = 0; i < _swaps.length; i++) {
-      // Validate ratios sum to 100%
-      IERC20 _tokenIn = IERC20(_swaps[i].path.toAddress(0));
-      require(donationRatios[_tokenIn] == WAD, "GrantRoundManager: Ratios do not sum to 100%");
-      require(swapOutputs[_tokenIn] == 0, "GrantRoundManager: Swap parameter has duplicate input tokens");
-
-      // Do nothing if the swap input token equals donationToken
-      if (_tokenIn == donationToken) {
-        swapOutputs[_tokenIn] = _swaps[i].amountIn;
-        continue;
-      }
-
-      // Otherwise, execute swap
-      ExactInputParams memory params = ExactInputParams(
-        _swaps[i].path,
-        address(this), // send output to the contract and it will be transferred later
-        _deadline,
-        _swaps[i].amountIn,
-        _swaps[i].amountOutMin
+    // Iterate through each GrantRound to verify:
+    //   - The round has the same donationToken as the GrantRoundManager
+    //   - The round is active
+    for (uint256 i = 0; i < _rounds.length; i++) {
+      require(_rounds[i].isActive(), "GrantRoundManager: GrantRound is not active");
+      require(
+        donationToken == _rounds[i].donationToken(),
+        "GrantRoundManager: GrantRound's donation token does not match GrantRoundManager's donation token"
       );
-      swapOutputs[_tokenIn] = exactInput(params); // save off output amount for later
     }
-  }
 
-  /**
-   * @dev Core donation logic that transfers funds to grants
-   * @param _donations Array of donations to execute
-   */
-  function _transferDonations(Donation[] calldata _donations) internal {
-    for (uint256 i = 0; i < _donations.length; i++) {
-      // Get data for this donation
-      GrantRound[] calldata _rounds = _donations[i].rounds;
-      uint96 _grantId = _donations[i].grantId;
-      IERC20 _tokenIn = _donations[i].token;
-      uint256 _donationAmount = (swapOutputs[_tokenIn] * _donations[i].ratio) / WAD;
-      require(_donationAmount > 0, "GrantRoundManager: Donation amount must be greater than zero"); // verifies that swap and donation inputs are consistent
+    // --- Swap ---
+    address _payoutAddress = registry.getGrantPayee(_grantId);
+    uint256 _amountIn = _donation.amountIn;
+    uint256 _amountOut = _amountIn; // by default, by may be overwritten in the swap branch below
 
-      // Execute transfer
-      address _payee = registry.getGrantPayee(_grantId);
-      if (_tokenIn == donationToken) {
-        _tokenIn.safeTransferFrom(msg.sender, _payee, _donationAmount); // transfer token directly from caller
-      } else {
-        donationToken.transfer(_payee, _donationAmount); // transfer swap output
+    if (_tokenIn == donationToken && msg.value == 0) {
+      // ETH as the donation token is not supported, so ensure msg.value is zero
+      _tokenIn.safeTransferFrom(msg.sender, _payoutAddress, _amountOut); // transfer funds directly to payout address
+    } else {
+      // Swap setup
+      ISwapRouter.ExactInputParams memory params = ISwapRouter.ExactInputParams(
+        _donation.path,
+        _payoutAddress, // recipient
+        _donation.deadline,
+        _amountIn,
+        _donation.amountOutMinimum
+      );
+
+      // If user is sending a token, transfer it to this contract and approve the router to spend it
+      if (msg.value == 0) {
+        _tokenIn.safeTransferFrom(msg.sender, address(this), _amountIn);
+        _tokenIn.approve(address(router), type(uint256).max); // TODO optimize so we don't call this every time
       }
 
-      // Emit event
-      emit GrantDonation(_grantId, _tokenIn, _donationAmount, _rounds);
+      // Execute swap -- output of swap is sent to the payoutAddress
+      _amountOut = router.exactInput{value: msg.value}(params);
     }
+
+    emit GrantDonation(_grantId, _tokenIn, _amountIn, _amountOut, _rounds);
   }
 }

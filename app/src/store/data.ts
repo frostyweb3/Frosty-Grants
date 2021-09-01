@@ -3,7 +3,7 @@
  */
 
 // --- External imports ---
-import { computed, markRaw, Ref, ref } from 'vue';
+import { computed, markRaw, ref } from 'vue';
 
 // --- Our imports ---
 import { BigNumber, Contract } from 'src/utils/ethers';
@@ -17,12 +17,9 @@ import {
   MULTICALL_ADDRESS,
   MULTICALL_ABI,
   ERC20_ABI,
-  SUPPORTED_TOKENS_MAPPING,
 } from 'src/utils/constants';
-import { Grant, GrantRound, GrantRounds, GrantMetadataResolution, GrantRoundMetadataResolution } from '@dgrants/types';
+import { Grant, GrantRound, GrantRounds } from '@dgrants/types';
 import { TokenInfo } from '@uniswap/token-lists';
-import { resolveMetaPtr } from 'src/utils/ipfs';
-import { CLR, fetch, linear, InitArgs, GrantsDistribution, GrantRoundFetchArgs } from '@dgrants/dcurve';
 
 // --- Parameters required ---
 const { provider } = useWalletStore();
@@ -34,13 +31,8 @@ const roundManager = ref<Contract>();
 // Most recent data read is saved as state
 const lastBlockNumber = ref<number>(0);
 const lastBlockTimestamp = ref<number>(0);
-
 const grants = ref<Grant[]>();
-const grantMetadata = ref<Record<string, GrantMetadataResolution>>({});
-const distributions = ref<GrantsDistribution>();
-
 const grantRounds = ref<GrantRounds>();
-const grantRoundMetadata = ref<Record<string, GrantRoundMetadataResolution>>({});
 
 // --- Store methods and exports ---
 export default function useDataStore() {
@@ -162,71 +154,11 @@ export default function useDataStore() {
       })
     );
 
-    // test/example
-    const clr = new CLR({
-      calcAlgo: linear,
-      includePayouts: true,
-    } as InitArgs);
-    // get contributions and grantRound details
-    const grantRoundArgs = await fetch({
-      provider: provider.value,
-      grantRound: '0x8B4091997E3EbB87be90cEd3e50d8Bb27e1DC742',
-      grantRoundManager: GRANT_ROUND_MANAGER_ADDRESS,
-      grantRegistry: GRANT_REGISTRY_ADDRESS,
-      supportedTokens: SUPPORTED_TOKENS_MAPPING,
-      ignore: {
-        grants: [],
-        contributionAddress: [],
-      },
-    } as GrantRoundFetchArgs);
-    // calc the distributions
-    const distribution = await clr.calculate(grantRoundArgs);
-    console.log(distribution);
-    console.log(await clr.verify(grantRoundArgs, distribution.trustBonusMetaPtr, distribution.hash));
-
     // Save off data
     lastBlockNumber.value = (blockNumber as BigNumber).toNumber();
     lastBlockTimestamp.value = (timestamp as BigNumber).toNumber();
     grants.value = grantsList as Grant[];
     grantRounds.value = grantRoundsList as GrantRound[];
-    distributions.value = distribution;
-
-    // Fetch Metadata
-    const grantMetaPtrs = grants.value.map((grant) => grant.metaPtr);
-    const grantRoundMetaPtrs = grantRounds.value.map((grantRound) => grantRound.metaPtr);
-    void fetchMetaPtrs(grantMetaPtrs, grantMetadata);
-    void fetchMetaPtrs(grantRoundMetaPtrs, grantRoundMetadata);
-  }
-
-  /**
-   * @notice Helper method that fetches metadata for a Grant or GrantRound, and saves the data
-   * to the state as soon as it's received
-   * @param metaPtrs Array of URLs to resolve
-   * @param metadata Name of the store's ref to assign resolve metadata to
-   */
-  async function fetchMetaPtrs(metaPtrs: string[], metadata: Ref) {
-    const newMetadata = metaPtrs
-      .filter((metaPtr) => !metadata.value[metaPtr])
-      .reduce((prev, cur) => {
-        return {
-          ...prev,
-          [cur]: { status: 'pending' },
-        };
-      }, {});
-    // save these pending metadata objects to state
-    metadata.value = { ...metadata.value, ...newMetadata };
-    // resolve metadata via metaPtr and update state
-    Object.keys(newMetadata).map(async (url) => {
-      try {
-        const data = await resolveMetaPtr(url);
-        metadata.value[url] = { status: 'resolved', ...data };
-      } catch (e) {
-        metadata.value[url] = { status: 'error' };
-        console.error(e);
-      }
-    });
-
-    return metadata;
   }
 
   /**
@@ -252,8 +184,5 @@ export default function useDataStore() {
     lastBlockTimestamp: computed(() => lastBlockTimestamp.value || 0),
     grants: computed(() => grants.value),
     grantRounds: computed(() => grantRounds.value),
-    grantMetadata: computed(() => grantMetadata.value),
-    grantRoundMetadata: computed(() => grantRoundMetadata.value),
-    distributions: computed(() => distributions.value),
   };
 }

@@ -3,18 +3,29 @@
  */
 import router from 'src/router/index';
 import { RouteLocationRaw } from 'vue-router';
-import { BigNumber, BigNumberish, Contract, ContractTransaction, isAddress } from 'src/utils/ethers';
+import { BigNumber, isAddress } from 'src/utils/ethers';
+import { BigNumberish, Contract, ContractTransaction } from 'ethers';
 import { GrantRound } from '@dgrants/types';
 
-// --- Formatters ---
 // Returns an address with the following format: 0x1234…abcd
 export function formatAddress(address: string) {
   if (!address || address.length !== 42) return null;
   return `${address.slice(0, 6)}…${address.slice(38)}`;
 }
 
-export function isDefined(val: unknown) {
-  return !!val;
+// Navigates to the specified page and pushes a new entry into the history stack
+export async function pushRoute(to: RouteLocationRaw) {
+  await router.push(to);
+}
+
+// Returns true if the provided URL is a valid URL
+export function isValidUrl(val: string | undefined) {
+  return val && val.includes('://'); // TODO more robust URL validation
+}
+
+// Returns true if the provided address is valid (TODO support ENS)
+export function isValidAddress(val: string | undefined) {
+  return val && isAddress(val);
 }
 
 // Expects a unix timestamp and will return a human readable message of how far in the past/future it is
@@ -33,18 +44,6 @@ export function unixToLocaleString(time: BigNumberish) {
   return new Date(BigNumber.from(time).toNumber() * 1000).toLocaleString();
 }
 
-// --- Validation ---
-// Returns true if the provided URL is a valid URL
-export function isValidUrl(val: string | undefined) {
-  return val && val.includes('://'); // TODO more robust URL validation
-}
-
-// Returns true if the provided address is valid (TODO support ENS)
-export function isValidAddress(val: string | undefined) {
-  return val && isAddress(val);
-}
-
-// --- Tokens ---
 // Check for approved allowance
 export async function checkAllowance(token: Contract, ownerAddress: string | undefined, spenderAddress: string) {
   // return the balance held for userAddress
@@ -59,14 +58,8 @@ export async function getApproval(token: Contract, address: string, amount: BigN
   await tx.wait();
 }
 
-// --- Other ---
 // Check against the grantRounds status for a match
 export function hasStatus(status: string) {
   // returns a fn (currying the given status)
   return (round: GrantRound) => round.status === status;
-}
-
-// Navigates to the specified page and pushes a new entry into the history stack
-export async function pushRoute(to: RouteLocationRaw) {
-  await router.push(to);
 }

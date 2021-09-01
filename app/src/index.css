@@ -22,6 +22,11 @@
     @apply text-headline;
   }
 
+  a {
+    @apply underline;
+    @apply hover:text-grey-400;
+  }
+
   [type="text"],
   [type="email"],
   [type="url"],
@@ -46,33 +51,24 @@
 
 /* Add styles to components */
 @layer components {
-  .indent {
+  .intent {
     text-indent: 1em;
   }
-
   .link {
     @apply text-grey-500 underline cursor-pointer;
   }
-
-  .btn {
-    @apply flex items-center gap-2 whitespace-nowrap uppercase font-medium bg-grey-500 text-white px-8 py-4 hover:bg-grey-400;
-  }
-
-  .btn.disabled {
-    @apply bg-grey-200 hover:bg-grey-200 cursor-default;
-  }
-
-  .btn svg {
-    @apply stroke-3 stroke-white object-contain h-6 w-6 md:h-8 md:w-8;
-  }
 }
 
-/* Add styles to utilities */
+/* Add styles to utilities      */
 @layer utilities {
   .icon,
   .icon-small,
   .icon-large {
-    @apply stroke-2 object-contain;
+    @apply object-contain stroke-2 stroke-grey-400 group-hover:stroke-grey-500 hover:stroke-grey-500;
+  }
+
+  .icon.in-cart {
+    @apply stroke-teal;
   }
 
   .icon {
@@ -81,28 +77,22 @@
 
   .icon-small {
     @apply h-6 w-6 md:h-10 md:w-10;
-    object-fit: contain;
   }
 
   .icon-large {
     @apply h-16 w-16 md:h-20 md:w-20;
-    object-fit: contain;
   }
 
-  .icon-primary {
-    @apply stroke-grey-400 group-hover:stroke-grey-500 hover:stroke-grey-500;
-  }
-
-  .icon-secondary {
-    @apply stroke-teal;
-  }
-
-  .icon-heavy {
-    @apply stroke-4;
+  .link {
+    @apply text-grey-500 underline cursor-pointer;
   }
 
   .btn {
-    @apply flex items-center justify-center gap-x-2 whitespace-nowrap uppercase font-medium bg-grey-500 text-white px-8 py-4 hover:bg-grey-400;
+    @apply flex items-center gap-x-2 whitespace-nowrap uppercase font-medium bg-grey-500 text-white px-8 py-4 hover:bg-grey-400;
+  }
+
+  .btn.disabled {
+    @apply bg-grey-200 hover:bg-grey-200 cursor-default;
   }
 
   .btn svg {

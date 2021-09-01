@@ -1,18 +1,16 @@
 <template>
   <!-- Grant details -->
   <div v-if="!isEditing && grant">
-    <h1 class="my-6 text-center text-3xl font-extrabold text-gray-900">Grant Details</h1>
-    <p>Name: {{ grantMetadata?.name }}</p>
-    <p>Description: {{ grantMetadata?.description }}</p>
+    <h1 class="my-6 text-center text-3xl font-extrabold text-gray-900">
+      Details for Grant ID {{ grant.id.toString() }}
+    </h1>
     <p>Owner: {{ grant.owner }}</p>
     <p>Payee: {{ grant.payee }}</p>
-    <div class="flex justify-center">
-      <button v-if="isInCart(grant.id)" @click="removeFromCart(grant?.id)" class="mt-5 btn btn-primary">
-        Remove from Cart
-      </button>
-      <button v-else @click="addToCart(grant?.id)" class="mt-5 btn btn-primary">Add to Cart</button>
-      <button v-if="isOwner" @click="enableEdit()" class="mt-5 btn btn-secondary">Edit Grant</button>
-    </div>
+    <p>
+      Metadata URL: <a class="link" :href="grant.metaPtr" target="_blank">{{ grant.metaPtr }}</a>
+    </p>
+
+    <button v-if="isOwner" @click="isEditing = true" class="mt-5 btn btn-primary">Edit Grant</button>
   </div>
 
   <!-- Editing grant -->
@@ -23,7 +21,7 @@
         src="https://tailwindui.com/img/logos/workflow-mark-indigo-600.svg"
         alt="Workflow"
       />
-      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">Edit Grant {{ grantMetadata?.name }}</h2>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">Edit Grant {{ grant.id.toString() }}</h2>
     </div>
 
     <div class="mt-8 sm:mx-auto sm:w-full sm:max-w-md text-left">
@@ -49,24 +47,14 @@
             errorMsg="Please enter a valid address"
           />
 
-          <!-- Grant name -->
+          <!-- Metadata pointer -->
           <BaseInput
-            v-model="form.name"
-            description="Your grant's name"
-            id="grant-name"
-            label="Grant name"
-            :rules="isDefined"
-            errorMsg="Please enter a name"
-          />
-
-          <!-- Grant Description -->
-          <BaseInput
-            v-model="form.description"
-            description="Your grant's description"
-            id="grant-description"
-            label="Grant description"
-            :rules="isDefined"
-            errorMsg="Please enter a description"
+            v-model="form.metaPtr"
+            description="URL containing additional details about this grant"
+            id="metadata-url"
+            label="Metadata URL"
+            :rules="isValidUrl"
+            errorMsg="Please enter a valid URL"
           />
 
           <!-- Submit and cancel buttons -->
@@ -95,19 +83,17 @@ import { computed, defineComponent, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import BaseInput from 'src/components/BaseInput.vue';
 // --- Store ---
-import useCartStore from 'src/store/cart';
 import useDataStore from 'src/store/data';
 import useWalletStore from 'src/store/wallet';
 // --- Methods and Data ---
 import { GRANT_REGISTRY_ADDRESS, GRANT_REGISTRY_ABI } from 'src/utils/constants';
 import { Contract, ContractTransaction } from 'src/utils/ethers';
-import { isValidAddress, isValidUrl, isDefined } from 'src/utils/utils';
+import { isValidAddress, isValidUrl } from 'src/utils/utils';
 // --- Types ---
 import { GrantRegistry } from '@dgrants/contracts';
-import * as ipfs from 'src/utils/ipfs';
 
 function useGrantDetail() {
-  const { grants, poll, grantMetadata: metadata } = useDataStore();
+  const { grants, poll } = useDataStore();
   const { signer, userAddress } = useWalletStore();
 
   const route = useRoute();
@@ -116,30 +102,20 @@ function useGrantDetail() {
     if (!grants.value || Array.isArray(id)) return null; // array type unsupported
     return grants.value[Number(id)];
   });
-  const grantMetadata = computed(() => (grant.value ? metadata.value[grant.value.metaPtr] : null));
 
   // --- Edit capabilities ---
   const isOwner = computed(() => userAddress.value === grant.value?.owner);
   const isEditing = ref(false);
-
-  const form = ref<{ owner: string; payee: string; name: string; description: string }>({
+  const form = ref<{ owner: string; payee: string; metaPtr: string }>({
     owner: grant.value?.owner || '',
     payee: grant.value?.payee || '',
-    name: grantMetadata.value?.name || '',
-    description: grantMetadata.value?.description || '',
+    metaPtr: grant.value?.metaPtr || '',
   });
-
   const isFormValid = computed(() => {
     if (!grant.value) return false;
-    const { owner, payee, name, description } = form.value;
-    const areFieldsValid = isValidAddress(owner) && isValidAddress(payee) && isDefined(name) && isDefined(description);
-
-    const areFieldsUpdated =
-      owner !== grant.value.owner ||
-      payee !== grant.value.payee ||
-      name !== grantMetadata.value?.name ||
-      description !== grantMetadata.value?.description;
-
+    const { owner, payee, metaPtr } = form.value;
+    const areFieldsValid = isValidAddress(owner) && isValidAddress(payee) && isValidUrl(metaPtr);
+    const areFieldsUpdated = owner !== grant.value.owner || payee !== grant.value.payee || metaPtr !== grant.value.metaPtr; // prettier-ignore
     return areFieldsValid && areFieldsUpdated;
   });
 
@@ -147,8 +123,10 @@ function useGrantDetail() {
    * @notice Resets the form values that user may have changed, and hides the edit window
    */
   function cancelEdits() {
-    prefillEditForm();
-
+    // Reset form values
+    form.value.owner = grant.value?.owner || '';
+    form.value.payee = grant.value?.payee || '';
+    form.value.metaPtr = grant.value?.metaPtr || '';
     // Hide edit form
     isEditing.value = false;
   }
@@ -158,7 +136,7 @@ function useGrantDetail() {
    */
   async function saveEdits() {
     // Validation
-    const { owner, payee, name, description } = form.value;
+    const { owner, payee, metaPtr } = form.value;
     if (!grant.value) throw new Error('No grant selected');
     if (!signer.value) throw new Error('Please connect a wallet');
 
@@ -168,27 +146,13 @@ function useGrantDetail() {
     // Determine which update method to call
     let tx: ContractTransaction;
     const g = grant.value; // for better readability in the if statements
-    let metaPtr = g.metaPtr;
-
-    const gMetadata = grantMetadata.value;
-    const isMetaPtrUpdated = name !== gMetadata?.name || description !== gMetadata?.description;
-    if (isMetaPtrUpdated) {
-      metaPtr = await ipfs
-        .uploadGrantMetadata({ name, description })
-        .then((cid) => ipfs.getMetaPtr({ cid: cid.toString() }));
-    }
-
-    if (owner !== g.owner && payee === g.payee && !isMetaPtrUpdated) {
-      // update Grant Owner
+    if (owner !== g.owner && payee === g.payee && metaPtr === g.metaPtr) {
       tx = await registry.updateGrantOwner(g.id, owner);
-    } else if (owner === g.owner && payee !== g.payee && !isMetaPtrUpdated) {
-      // update Grant Payee
+    } else if (owner === g.owner && payee !== g.payee && metaPtr === g.metaPtr) {
       tx = await registry.updateGrantPayee(g.id, payee);
-    } else if (owner === g.owner && payee === g.payee && isMetaPtrUpdated) {
-      // update Grant MetaPtr
+    } else if (owner === g.owner && payee === g.payee && metaPtr !== g.metaPtr) {
       tx = await registry.updateGrantMetaPtr(g.id, metaPtr);
     } else {
-      // update all
       tx = await registry.updateGrant(g.id, owner, payee, metaPtr);
     }
 
@@ -198,48 +162,14 @@ function useGrantDetail() {
     cancelEdits(); // reset form ref and toggle page state back to display mode
   }
 
-  /**
-   * @notice Loads the default values into edit form, and shows the edit window
-   */
-  function enableEdit() {
-    prefillEditForm();
-
-    // Enable edit form
-    isEditing.value = true;
-  }
-
-  /**
-   * @notice util function which prefills edit form
-   */
-  function prefillEditForm() {
-    form.value.owner = grant.value?.owner || '';
-    form.value.payee = grant.value?.payee || '';
-    form.value.name = grantMetadata.value?.name || '';
-    form.value.description = grantMetadata.value?.description || '';
-  }
-
-  return {
-    isEditing,
-    isOwner,
-    isValidAddress,
-    isValidUrl,
-    isDefined,
-    isFormValid,
-    grant,
-    grantMetadata,
-    form,
-    cancelEdits,
-    saveEdits,
-    enableEdit,
-  };
+  return { isEditing, isOwner, isValidAddress, isValidUrl, isFormValid, grant, form, cancelEdits, saveEdits };
 }
 
 export default defineComponent({
   name: 'GrantRegistryGrantDetail',
   components: { BaseInput },
   setup() {
-    const { addToCart, isInCart, removeFromCart } = useCartStore();
-    return { isInCart, addToCart, removeFromCart, ...useGrantDetail() };
+    return { ...useGrantDetail() };
   },
 });
 </script>

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.7.6;
+pragma solidity ^0.8.6;
 
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./GrantRegistry.sol";
 
 contract GrantRound {
   using SafeERC20 for IERC20;
-
+  
   // --- Data ---
 
   /// @notice Unix timestamp of the start of the round

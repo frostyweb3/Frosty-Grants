@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.7.6;
+pragma solidity ^0.8.6;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -8,7 +8,7 @@ contract MockToken is ERC20 {
     _mint(msg.sender, initialSupply);
   }
 
-  function mint(uint256 amount) external {
-    _mint(msg.sender, amount);
+  function mint(uint256 initialSupply) external {
+    _mint(msg.sender, initialSupply);
   }
 }

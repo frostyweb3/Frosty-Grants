@@ -31,12 +31,12 @@ import { getAddress } from 'src/utils/ethers';
 import { RPC_URL } from 'src/utils/constants';
 
 const { startPolling } = useDataStore();
-const { setLastWallet } = useSettingsStore();
+const { setLastWallet, isDark } = useSettingsStore();
 const defaultProvider = new JsonRpcProvider(RPC_URL);
 
 // State variables
 let onboard: OnboardAPI; // instance of Blocknative's onboard.js library
-const supportedChainIds = [1, 4, 31337]; // chain IDs supported by this app
+const supportedChainIds = [1, 4, 31337, 43113]; // chain IDs supported by this app
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const rawProvider = ref<any>(); // raw provider from the user's wallet, e.g. EIP-1193 provider
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -71,7 +71,8 @@ export default function useWalletStore() {
   function initializeOnboard() {
     onboard = Onboard({
       dappId: import.meta.env.VITE_BLOCKNATIVE_API_KEY,
-      networkId: 1,
+      darkMode: isDark.value,
+      networkId: 43113,
       walletSelect: { wallets },
       walletCheck: walletChecks,
       subscriptions: {

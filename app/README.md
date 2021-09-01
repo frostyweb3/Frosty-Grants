@@ -4,6 +4,7 @@ Ethereum frontend app built with the following stack:
 
 - [Vue 3](https://v3.vuejs.org/) as the foundation
 - [Tailwind CSS](https://tailwindcss.com) for styling
+- [Nightwind](https://github.com/jjranalli/nightwind) for easy dark mode support
 - [Ethers](https://docs.ethers.io/v5/single-page/) for interacting with Ethereum
 - [Vite](https://vitejs.dev/) for 10x-100x faster builds
 - [Onboard](https://docs.blocknative.com/onboard) for connecting wallets
@@ -11,20 +12,11 @@ Ethereum frontend app built with the following stack:
 
 ## Setup
 
-Install MetaMask and configure it with the default Hardhat mnemonic of `test test test test test test test test test test test junk`.
-If you already have MetaMask installed, it may be easier to create a new browser profile called "Hardhat" so you can configure MetaMask with this mnemonic without affecting your existing MetaMask installation.
-
-Then, add a network to MetaMask with the following information:
+For local testing, add a network to MetaMask with the following information:
 
 - Name: Hardhat
 - New RPC URL: http://127.0.0.1:8545
 - Chain ID: 31337
-
-This configuration is required to ensure your account is funded with tokens for testing.
-When you rebuild the app, you'll likely need to reset MetaMask so the nonces match what the local network expects.
-You can do this in MetaMask by clicking the circle in the top right > Settings > Advanced > Reset Account.
-
-You can now build the app with:
 
 ```sh
 # Install packages
@@ -60,6 +52,7 @@ If the app loads and the block number is zero after connecting your wallet, ther
 Notes on customizing this app:
 
 - Primary and secondary theme colors are defined in `tailwind.config.js`. Other colors are inlined as classes, e.g. `text-gray-400`.
+- Dark mode is handled with [Nightwind](https://github.com/jjranalli/nightwind), which is a Tailwind CSS plugin that generates a dark theme by automatically inverting color classes. The resulting dark mode will not look as a good as a fully customized/hand-crafted dark mode, but this is much less work to implement, and Nightwind does offer some control over the output
 - Vite does not use `process.env.MY_VARIABLE` for environment variables, but instead uses `import.meta.env.VITE_MY_VARIABLE`. Values in `.env` that are prefixed with `VITE_` are automatically included. Update the type definitions in `src/shims.d.ts` for any new environment variables
 - The Vue router is configured to use `history` mode and assumes the app is hosted at the domain root. Both of these defaults can be changed in `src/router/index.ts`
 - Blocknative's [onboard.js](https://docs.blocknative.com/onboard) is used for connecting wallets. Like Vue 3, Vite does not automatically polyfill defaults like `os`, `http`, and `crypto` that are needed by onboard.js, so we `require` this in `vite.config.ts`

@@ -29,8 +29,8 @@
         :readonly="readonly"
         :disabled="disabled"
       />
-      <div v-if="!isValid" class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none h-12 w-12">
-        <WarningIcon class="icon stroke-pink" />
+      <div v-if="!isValid" class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+        <ExclamationCircleIcon class="h-5 w-5 text-red-500" />
       </div>
     </div>
     <p v-if="!isValid" class="mt-2 text-sm text-red-600" :id="`${id}-error`">{{ errorMsg }}</p>
@@ -39,14 +39,14 @@
 
 <script lang="ts">
 import { computed, defineComponent, ref } from 'vue';
-import { WarningIcon } from '@fusion-icons/vue/interface';
+import { ExclamationCircleIcon } from '@heroicons/vue/solid';
 
 export default defineComponent({
   name: 'BaseInput',
-  components: { WarningIcon },
+  components: { ExclamationCircleIcon },
   props: {
     // --- Required props ---
-    modelValue: { type: [String, Number], required: true, default: undefined }, // from v-model, don't pass this directly
+    modelValue: { type: String, required: true, default: undefined }, // from v-model, don't pass this directly
     // --- Optional props ---
     label: { type: String, required: false, default: undefined }, // field label
     description: { type: String, required: false, default: undefined }, // field description

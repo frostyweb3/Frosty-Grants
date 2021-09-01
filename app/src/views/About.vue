@@ -1,11 +1,10 @@
-<template>
-  <h1 class="my-6 text-center text-3xl font-extrabold text-gray-900">About</h1>
-</template>
+<template>dont need this page as its a component</template>
 
 <script lang="ts">
 import { defineComponent } from 'vue';
 
 export default defineComponent({
-  name: 'Home',
+  name: 'About',
+  components: {},
 });
 </script>

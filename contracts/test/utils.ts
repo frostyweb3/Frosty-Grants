@@ -2,14 +2,13 @@
  * @notice This file contains test utilities and helper methods
  */
 // --- Internal imports ---
-import { Grant } from '@dgrants/types';
+import { Grant } from '../../types';//'@dgrants/types';
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/dist/src/signer-with-address';
 
 // --- External imports ---
 import { ethers, network } from 'hardhat';
 import { expect } from 'chai';
 import { BigNumber, BigNumberish, utils } from 'ethers';
-import { Log } from '@ethersproject/providers';
 import { abi as UNISWAP_POOL_ABI } from '@uniswap/v3-core/artifacts/contracts/interfaces/IUniswapV3Pool.sol/IUniswapV3Pool.json';
 import { FeeAmount, Pool, Route, computePoolAddress, encodeRouteToPath } from '@uniswap/v3-sdk';
 import { Token } from '@uniswap/sdk-core';
@@ -19,6 +18,7 @@ const { defaultAbiCoder, hexStripZeros, hexZeroPad, keccak256 } = utils;
 // --- Constants ---
 export const ETH_ADDRESS = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 export const WETH_ADDRESS = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+export const UNISWAP_ROUTER = '0xE592427A0AEce92De3Edee1F18E0157C05861564';
 export const UNISWAP_FACTORY = '0x1F98431c8aD98523631AE4a59f267346ea31F984';
 
 // Mapping from lowercase token symbol to properties about that token
@@ -26,9 +26,7 @@ export const tokens = {
   eth: { address: ETH_ADDRESS, name: 'Ether', symbol: 'ETH', decimals: 18, mappingSlot: null },
   weth: { address: WETH_ADDRESS, name: 'Wrapped Ether', symbol: 'WETH', decimals: 18, mappingSlot: '0x3' },
   dai: { address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', name: "Dai", symbol: "DAI", decimals: 18, mappingSlot: '0x2' }, // prettier-ignore
-  gtc: { address: '0xDe30da39c46104798bB5aA3fe8B9e0e1F348163F', name: "Gitcoin", symbol: "GTC", decimals: 18, mappingSlot: '0x5' }, // prettier-ignore
-  usdc: { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', name: "USD Coin", symbol: "USDC", decimals: 6, mappingSlot: '0x9' }, // prettier-ignore
-  uni: { address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', name: "Uniswap", symbol: "UNI", decimals: 18, mappingSlot: '0x4' }, // prettier-ignore
+  gtc: { address: '0xDe30da39c46104798bB5aA3fe8B9e0e1F348163F', name: "USD Coin", symbol: "USDC", decimals: 18, mappingSlot: '0x5' }, // prettier-ignore
 };
 
 // This type is our list of tokens supported in the "Token Helpers" section
@@ -57,19 +55,7 @@ export async function setNextBlockTimestamp(timestamp: BigNumberish): Promise<nu
   return timestamp;
 }
 
-// --- Uniswap Helpers ---
-// Loops through an array of logs to find a Uniswap V3 `Swap` log, and returns the swap's amountOut
-export function getSwapAmountOut(logs: Log[]): BigNumber {
-  const swapTopic = '0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67'; // topic for Swap event
-  const swapLogs = logs.filter((log) => log.topics[0] === swapTopic);
-  const swapLog = swapLogs[swapLogs.length - 1]; // always use the last Swap log to get final output amount
-  const swapEvent = 'event Swap(address indexed sender, address indexed recipient, int256 amount0, int256 amount1, uint160 sqrtPriceX96, uint128 liquidity, int24 tick)'; // prettier-ignore
-  const iface = new ethers.utils.Interface([swapEvent]);
-  const event = iface.parseLog(swapLog);
-  const amountOut = event.args.amount1 as BigNumber; // this is often negative
-  return amountOut.abs();
-}
-
+// --- Uniswap SDK Helpers ---
 export async function encodeRoute(tokens: SupportedToken[]): Promise<string> {
   const route = await getRoute(tokens);
   return encodeRouteToPath(route, false);
@@ -84,17 +70,7 @@ async function getRoute(tokens: SupportedToken[]): Promise<Route<Token, Token>> 
     poolPromises.push(getPoolInstance(inputToken, outputToken));
   });
   const pools = await Promise.all(poolPromises);
-
-  // Get input token. First we guess that our input token is token 0 for a pool, and if not then it must be token 1
-  const inSymbol = tokens[0] === 'eth' ? 'weth' : tokens[0];
-  let inToken = pools.find((pool) => pool.token0.symbol?.toLowerCase() === inSymbol)?.token0;
-  inToken = inToken ? inToken : pools.find((pool) => pool.token1.symbol?.toLowerCase() === inSymbol)?.token1;
-
-  // Get output token using same process
-  const outSymbol = tokens[tokens.length - 1] === 'eth' ? 'weth' : tokens[tokens.length - 1];
-  let outToken = pools.find((pool) => pool.token0.symbol?.toLowerCase() === outSymbol)?.token0;
-  outToken = outToken ? outToken : pools.find((pool) => pool.token1.symbol?.toLowerCase() === outSymbol)?.token1;
-  return new Route(pools, inToken as Token, outToken as Token);
+  return new Route(pools, pools[0].token0, pools[pools.length - 1].token1);
 }
 
 async function getPoolInstance(token0: SupportedToken, token1: SupportedToken): Promise<Pool> {

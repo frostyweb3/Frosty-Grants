@@ -5,9 +5,7 @@
   "workspaces": [
     "app",
     "contracts",
-    "dcurve",
-    "types",
-    "utils"
+    "types"
   ],
   "devDependencies": {
     "concurrently": "^6.2.0",
@@ -32,9 +30,7 @@
     "test": "lerna run test",
     "app": "yarn workspace @dgrants/app",
     "contracts": "yarn workspace @dgrants/contracts",
-    "types": "yarn workspace @dgrants/types",
-    "dcurve": "yarn workspace @dgrants/dcurve",
-    "utils": "yarn workspace @dgrants/utils"
+    "types": "yarn workspace @dgrants/types"
   },
   "husky": {
     "hooks": {
